@@ -1,0 +1,80 @@
+@startuml Edit file flow
+title Edit file flow
+
+actor User
+participant "Mobile App" as App
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Storage Service" as Storage
+participant "Metadata Service" as Metadata
+database "Metadata DB" as MetadataDB
+participant "Permission Service" as Permission
+database "Permission DB" as PermissionDB
+database "Object Storage" as ObjectStorage
+queue "Event Bus / Kafka" as Kafka
+participant "Sync Service" as Sync
+database "Sync DB" as SyncDB
+participant "Thumbnail Service" as Thumbnail
+participant "Search Service" as Search
+
+User -> App : Edit file
+App -> App : Calculate diff
+
+App -> Gateway : PATCH /files/{file_id}\ncurrent_version, diff
+Gateway -> Auth : Validate token
+Auth --> Gateway : user_id
+
+Gateway -> Storage : Edit file\nuser_id, file_id,\ncurrent_version, diff
+
+Storage -> Permission : Check edit access\nuser_id, file_id
+Permission -> PermissionDB : Check permissions
+PermissionDB --> Permission : allowed / denied
+Permission --> Storage : access result
+
+Storage -> ObjectStorage : Read current file
+ObjectStorage --> Storage : file content
+
+Storage -> Storage : Create new file version with a diff
+
+Storage -> ObjectStorage : Save new version
+ObjectStorage --> Storage : new_object_id
+
+Storage ->> Kafka : FileUpdated event\nfile_id, user_id,\nold_version, new_version,\nobject_id\nnew_object_id
+
+Storage --> Gateway : edit sucessful
+Gateway --> App : edit sucessful
+App --> User : File saved
+
+par Metadata update
+    Kafka ->> Metadata : FileUpdated event
+    Metadata -> MetadataDB : Update metadata\ncurrent_version,\nnew_object_id,\nupdated_at, last_editor
+    MetadataDB --> Metadata : OK
+
+    else Sync update
+    Kafka ->> Sync : FileUpdated event
+    Sync -> SyncDB : Add change to changelog\nfile_id, new_version
+    SyncDB --> Sync : OK
+    note right of Sync
+    Device synchronization
+    end note
+
+    else Thumbnail update
+    Kafka ->> Thumbnail : FileUpdated event
+    alt Preview should be updated
+         note right of Thumbnail
+        Update preview flow
+        end note
+    end
+
+    else Search indexing
+    Kafka ->> Search : FileUpdated event
+    Search -> Search : Update Search Index
+
+    else Permission handling
+    Kafka ->> Permission : FileUpdated event
+    Permission -> PermissionDB : Keep existing permissions\nfor new version
+    PermissionDB --> Permission : OK
+end
+
+
+@enduml

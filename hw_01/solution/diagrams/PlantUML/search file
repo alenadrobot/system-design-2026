@@ -1,0 +1,44 @@
+@startuml Search file flow
+title Search file flow
+
+actor User
+participant "Mobile App" as App
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Search Service" as Search
+database "Search Index" as SearchIndex
+participant "Metadata Service" as Metadata
+database "Metadata DB" as MetadataDB
+participant "Permission Service" as Permission
+database "Permission DB" as PermissionDB
+
+User -> App : Enter file name
+
+App -> Gateway : GET /files/search?query={name}
+Gateway -> Auth : Validate token
+Auth --> Gateway : user_id
+
+Gateway -> Search : Search files\nquery, user_id
+
+Search -> SearchIndex : Find matching file_ids\nby query
+SearchIndex --> Search : file_ids
+
+Search -> Metadata : Get file metadata\nuser_id, file_ids
+Metadata -> MetadataDB : Load metadata\nfor file_ids
+MetadataDB --> Metadata : files metadata
+
+Metadata -> Permission : Filter accessible files\nuser_id, file_ids
+Permission -> PermissionDB : Check permissions
+PermissionDB --> Permission : allowed file_ids
+Permission --> Metadata : allowed file_ids
+
+Metadata -> Metadata : Return accessible files
+Metadata --> Search : accessible files metadata
+
+Search -> Search : Sort results
+Search --> Gateway : search results
+Gateway --> App : search results
+
+App --> User : Display files
+
+@enduml

@@ -1,0 +1,51 @@
+@startuml Give file access flow
+title Give file access flow
+
+actor "Owner User" as Owner
+participant "Owner Mobile App" as OwnerApp
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Permission Service" as Permission
+database "Permission DB" as PermissionDB
+queue "Event Bus / Kafka" as Kafka
+participant "Sync Service" as Sync
+database "Sync DB" as SyncDB
+participant "Target User App" as TargetApp
+
+Owner -> OwnerApp : Add read/edit access\nfor target user
+
+OwnerApp -> Gateway : POST /files/{file_id}/permissions\nuser_id, permission
+Gateway -> Auth : Validate token
+Auth --> Gateway : owner_user_id
+
+Gateway -> Permission : Grant access\nowner_user_id, target_user_id,\nfile_id, permission
+
+Permission -> Permission : Check that owner_user_id can give access
+Permission -> PermissionDB : Create permission record\nfile_id, target_user_id, permission
+PermissionDB --> Permission : OK
+
+Permission -> Kafka : FileShared event\nfile_id, owner_user_id,\ntarget_user_id, permission
+
+Permission --> Gateway : access granted
+Gateway --> OwnerApp : success
+OwnerApp --> Owner : Access granted
+
+
+Kafka ->> Sync : FileShared event
+Sync -> SyncDB : Update that target user\nhas access for a new file
+SyncDB --> Sync : OK
+
+alt Target app is online
+    Sync -> TargetApp : WebSocket notification\nnew shared file available
+    note right of Sync
+        Device Synchronization Flow
+    end note
+else Target app is offline
+    note right of Sync
+    Target user will receive this change
+    when they open the app
+    end note
+end
+
+
+@enduml

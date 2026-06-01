@@ -1,0 +1,36 @@
+@startuml View folder files flow
+title View folder files flow
+
+actor User
+participant "Mobile App" as App
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Metadata Service" as Metadata
+database "Metadata DB" as MetadataDB
+participant "Permission Service" as Permission
+database "Permission DB" as PermissionDB
+
+User -> App : Open app / folder
+
+App -> Gateway : GET /folders/{folder_id}/files
+Gateway -> Auth : Validate token
+Auth --> Gateway : user_id
+
+Gateway -> Metadata : Get files in folder\nuser_id, folder_id
+
+Metadata -> MetadataDB : Find files and subfolders\nby folder_id
+MetadataDB --> Metadata : files metadata
+
+Metadata -> Permission : Filter accessible files\nuser_id, file_ids
+Permission -> PermissionDB : Check permissions
+PermissionDB --> Permission : allowed file_ids and\npermissions for files
+Permission --> Metadata : allowed file_ids and\npermissions for files
+
+Metadata -> Metadata : Return accessible \nfiles/folders and\npermissions for files
+
+Metadata --> Gateway : files and folders list and\npermissions for files
+Gateway --> App : files and folders list and\npermissions for files
+
+App --> User : Display files and folders and\nallowed actions for them
+
+@enduml
