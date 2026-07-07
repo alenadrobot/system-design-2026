@@ -1,0 +1,53 @@
+@startuml Download file flow
+title Download file flow
+
+actor User
+participant "Mobile App" as App
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Storage Service" as Storage
+participant "Metadata Service" as Metadata
+database "Metadata DB" as MetadataDB
+participant "Permission Service" as Permission
+database "Permission DB" as PermissionDB
+participant "CDN" as CDN
+database "Object Storage" as ObjectStorage
+
+User -> App : Select file
+
+App -> Gateway : GET /files/{file_id}/download
+Gateway -> Auth : Validate token
+Auth --> Gateway : user_id
+
+Gateway -> Storage : Init download\nuser_id, file_id
+
+Storage -> Metadata : Get file location\nuser_id, file_id
+Metadata -> MetadataDB : Load file metadata\nfile_id
+MetadataDB --> Metadata : object_id, version, size
+
+Metadata -> Permission : Check read access\nuser_id, file_id
+Permission -> PermissionDB : Check permissions
+PermissionDB --> Permission : allowed / denied
+Permission --> Metadata : access result
+
+Metadata --> Storage : object_id, version, size
+
+Storage -> Storage : Generate signed CDN URL
+Storage --> Gateway : signed_cdn_url
+Gateway --> App : signed_cdn_url
+
+App -> CDN : Download file\nusing signed CDN URL
+
+alt Cache hit
+    CDN --> App : File content
+else Cache miss
+    CDN -> ObjectStorage : Fetch file by object_key
+    ObjectStorage --> CDN : File content
+    CDN -> CDN : Cache file
+    CDN --> App : File content
+end
+
+App -> App : Save file to local cache
+App --> User : File added to device
+
+@enduml

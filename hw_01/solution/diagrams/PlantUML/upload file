@@ -1,0 +1,73 @@
+@startuml Upload new file flow
+title Upload new file flow
+
+actor User
+participant "Mobile App" as App
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Storage Service" as Storage
+participant "Billing Service" as Billing
+database "Object Storage" as ObjectStorage
+queue "Kafka" as Kafka
+participant "Metadata Service" as Metadata
+participant "Sync Service" as Sync
+participant "Thumbnail Service" as Thumbnail
+participant "Search Service" as Search
+participant "Permission Service" as Permission
+
+User -> App : Select file
+
+App -> Gateway : POST /files/upload\nfile_name, size, type, folder_id
+Gateway -> Auth : Validate token
+Auth --> Gateway : user_id
+
+Gateway -> Storage : Init upload request\nuser_id, file metadata
+Storage -> Billing : Check quota and paid plan\nuser_id, file_size
+Billing --> Storage : OK
+
+Storage -> Storage : Generate signed URL
+Storage --> Gateway : upload_id, signed_url
+Gateway --> App : upload_id, signed_url
+
+App -> ObjectStorage : Upload file using signed URL
+ObjectStorage --> App : Upload completed
+
+App --> User : File uploaded.\nIt will appear on other devices after processing.
+
+ObjectStorage -> Storage : ObjectCreated event\nobject_id
+
+Storage -> Kafka : Publish FileUploaded event\nfile_id, user_id, object_id,\nfile_name, size, folder_id
+'using par because actions can be done in parallel
+par Metadata creation
+    Kafka ->> Metadata : FileUploaded event
+    Metadata -> Metadata : Create file metadata record
+
+    else Sync update
+    Kafka ->> Sync : FileUploaded event
+    Sync --> App : Notify other devices\n
+
+    else Thumbnail generation
+    Kafka ->>Thumbnail : FileUploaded event
+    Thumbnail -> ObjectStorage : Read original file
+    ObjectStorage --> Thumbnail : File content
+    Thumbnail -> Thumbnail : Generate thumbnail
+    Thumbnail -> ObjectStorage : Save thumbnail
+    ObjectStorage --> Thumbnail : thumbnail_object_key
+    Thumbnail -> Metadata : Update thumbnail path\nfile_id, thumbnail_object_key
+    Metadata -> Metadata : Save thumbnail_key in Metadata DB
+    Metadata -> Thumbnail : ok
+
+    else Search indexing
+    Kafka ->> Search : FileUploaded event
+    Search -> Search : Update Search Index
+
+    else Permission initialization
+    Kafka ->> Permission : FileUploaded event
+    Permission -> Permission : Add permissions for user_id\nread/edit/delete
+
+    else Billing update
+    Kafka ->> Billing : FileUploaded event
+    Billing -> Billing : Update used storage
+end
+
+@enduml
