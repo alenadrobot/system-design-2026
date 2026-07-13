@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package wallet.antifraud.v1;
+
+service AntifraudService {
+  rpc CheckOperation(CheckOperationRequest)
+      returns (CheckOperationResponse);
+  // - INVALID_ARGUMENT: required fields are missing or amount_minor <= 0
+  // - NOT_FOUND: user, card, merchant, or operation context was not found
+  // - UNAVAILABLE: Antifraud Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+}
+
+message CheckOperationRequest {
+  int64 amount_minor = 1;
+  string curr = 2;
+  string user_id = 3;
+  string merchant_id = 4;
+  string merchant_country_code = 5;
+  string operation_id = 6;
+  string card_id = 7;
+}
+
+message CheckOperationResponse {
+  RiskDecision decision = 1;
+  repeated RiskReason reasons = 2;
+}
+
+enum RiskDecision {
+  RISK_DECISION_UNSPECIFIED = 0;
+  RISK_DECISION_DENY = 1;
+  RISK_DECISION_ALLOW = 2;
+  RISK_DECISION_REVIEW = 3;
+}
+
+enum RiskReason {
+  RISK_REASON_UNSPECIFIED = 0;
+  RISK_REASON_SUSPICIOUS_OPERATION = 1;
+  RISK_REASON_SUSPICIOUS_USER = 2;
+  RISK_REASON_SUSPICIOUS_COUNTRY = 3;
+}

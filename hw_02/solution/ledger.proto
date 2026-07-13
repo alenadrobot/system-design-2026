@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package wallet.ledger.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service LedgerService {
+ 
+rpc TransferMoney(TransferMoneyRequest)
+      returns (TransferMoneyResponse);
+  
+  // Possible gRPC errors:
+  // - INVALID_ARGUMENT: amount_minor <= 0 or currency is unsupported
+  // - NOT_FOUND: sender or receiver wallet does not exist
+  // - FAILED_PRECONDITION: insufficient funds or wallet is blocked
+  // - ALREADY_EXISTS: transfer_id is reused with different request data
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  
+}
+
+message TransferMoneyRequest {
+  string sender_wallet_id = 1;
+  string receiver_wallet_id = 2;
+  int64 amount_minor = 3;
+  string curr = 4;
+  string transfer_id = 5;
+}
+
+message TransferMoneyResponse {
+  string ledger_transaction_id = 1;
+  google.protobuf.Timestamp completed_at = 2;
+}
