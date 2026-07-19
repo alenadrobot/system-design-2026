@@ -55,6 +55,12 @@ paths:
       summary: Создать виртуальную карту
       operationId: createVirtualCard
       parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: 
+          type: string
+          format: uuid
       - name: walletId
         in: path
         description: Идентификатор кошелька

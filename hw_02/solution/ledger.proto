@@ -5,29 +5,254 @@ package wallet.ledger.v1;
 import "google/protobuf/timestamp.proto";
 
 service LedgerService {
- 
-rpc TransferMoney(TransferMoneyRequest)
-      returns (TransferMoneyResponse);
-  
-  // Possible gRPC errors:
-  // - INVALID_ARGUMENT: amount_minor <= 0 or currency is unsupported
+
+  // Возвращает учётный, зарезервированный и доступный баланс кошелька.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: wallet_id is empty
+  // - NOT_FOUND: wallet does not exist
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  rpc GetBalance(GetBalanceRequest)
+      returns (GetBalanceResponse);
+
+
+  // Переводит средства между двумя внутренними кошельками.
+  // Создаёт взаимосвязанные debit/credit entries.
+  //
+  // transfer_id используется как idempotency key.
+  // Повторный запрос с тем же transfer_id и теми же параметрами
+  // возвращает результат первой операции.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: invalid amount, currency or wallet identifiers
   // - NOT_FOUND: sender or receiver wallet does not exist
-  // - FAILED_PRECONDITION: insufficient funds or wallet is blocked
+  // - FAILED_PRECONDITION: insufficient funds, wallet is blocked,
+  //   wallets use different currencies
   // - ALREADY_EXISTS: transfer_id is reused with different request data
   // - UNAVAILABLE: Ledger Service is temporarily unavailable
   // - INTERNAL: unexpected internal error
-  
+  rpc TransferMoney(TransferMoneyRequest)
+      returns (TransferMoneyResponse);
+
+
+  // Зачисляет средства на внутренний кошелёк после подтверждения
+  // пополнения внешним банком или платёжным провайдером.
+  //
+  // В Ledger создаются две проводки:
+  // - списание с технического settlement account;
+  // - зачисление на кошелёк пользователя.
+  //
+  // deposit_id используется как idempotency key.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: invalid amount, currency or identifiers
+  // - NOT_FOUND: wallet or settlement account does not exist
+  // - FAILED_PRECONDITION: wallet is blocked or currency mismatch
+  // - ALREADY_EXISTS: deposit_id is reused with different request data
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  rpc DepositFunds(DepositFundsRequest)
+      returns (DepositFundsResponse);
+
+
+  // Резервирует средства перед операцией с внешним провайдером (оплата картой/вывод в банк/оплата через партнеров).
+  //
+  // Резерв уменьшает available_balance, но ещё не является
+  // окончательным списанием.
+  //
+  // reservation_id используется как idempotency key.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: invalid amount, currency, TTL or identifiers
+  // - NOT_FOUND: wallet or settlement account does not exist
+  // - FAILED_PRECONDITION: insufficient available balance,
+  //   wallet is blocked or currency mismatch
+  // - ALREADY_EXISTS: reservation_id is reused with different request data
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  rpc ReserveFunds(ReserveFundsRequest)
+      returns (ReserveFundsResponse);
+
+
+  // Подтверждает резерв после успешного выполнения операции
+  // внешним провайдером и превращает его в окончательное списание.
+  //
+  // Повторный вызов для уже подтверждённого резерва возвращает
+  // тот же успешный результат.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: invalid identifiers
+  // - NOT_FOUND: reservation does not exist
+  // - FAILED_PRECONDITION: reservation is cancelled, expired
+  //   or requires reconciliation
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  rpc CommitReservation(CommitReservationRequest)
+      returns (CommitReservationResponse);
+
+
+  // Отменяет резерв, если внешняя операция завершилась отказом.
+  // Средства снова становятся доступны пользователю.
+  //
+  // Повторная отмена уже отменённого резерва считается успешной.
+  //
+  // Errors:
+  // - INVALID_ARGUMENT: invalid identifiers
+  // - NOT_FOUND: reservation does not exist
+  // - FAILED_PRECONDITION: reservation has already been committed
+  // - UNAVAILABLE: Ledger Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+  rpc CancelReservation(CancelReservationRequest)
+      returns (CancelReservationResponse);
 }
 
+
+// Денежная сумма в минимальных единицах валюты.
+// Например, 1050 означает 10.50 RUB.
+message Money {
+  int64 amount_minor = 1;
+  // ISO 4217 currency code
+  string currency = 2;
+}
+
+
+message GetBalanceRequest {
+  string wallet_id = 1;
+}
+
+message GetBalanceResponse {
+  string wallet_id = 1;
+
+  // Полный учётный баланс кошелька.
+  Money ledger_balance = 2;
+
+  // Сумма активных резервов.
+  Money reserved_amount = 3;
+
+  // Сумма, которой пользователь может распоряжаться:
+  // ledger_balance - reserved_amount.
+  Money available_balance = 4;
+
+  google.protobuf.Timestamp calculated_at = 5;
+}
+
+
 message TransferMoneyRequest {
-  string sender_wallet_id = 1;
-  string receiver_wallet_id = 2;
-  int64 amount_minor = 3;
-  string curr = 4;
-  string transfer_id = 5;
+  string transfer_id = 1;
+
+  string sender_wallet_id = 2;
+  string receiver_wallet_id = 3;
+
+  Money amount = 4;
 }
 
 message TransferMoneyResponse {
-  string ledger_transaction_id = 1;
-  google.protobuf.Timestamp completed_at = 2;
+  string transfer_id = 1;
+  string ledger_transaction_id = 2;
+  google.protobuf.Timestamp completed_at = 3;
+}
+
+
+message DepositFundsRequest {
+  // Idempotency key received from Payment Service.
+  string deposit_id = 1;
+
+  // Business operation identifier in Payment Service.
+  string operation_id = 2;
+
+  string wallet_id = 3;
+
+  // Внутренний технический счёт, представляющий внешний банк
+  // или платёжного провайдера в Ledger.
+  string settlement_account_id = 4;
+
+  Money amount = 5;
+
+  // Идентификатор операции внешнего провайдера для аудита
+  // и последующей сверки.
+  string external_operation_id = 6;
+}
+
+message DepositFundsResponse {
+  string deposit_id = 1;
+  string ledger_transaction_id = 2;
+  google.protobuf.Timestamp completed_at = 3;
+}
+
+
+message ReserveFundsRequest {
+  // Idempotency key of the reservation.
+  string reservation_id = 1;
+
+  // Business operation identifier in Payment Service.
+  string operation_id = 2;
+
+  OperationType operation_type = 3;
+
+  string wallet_id = 4;
+
+  Money amount = 5;
+
+  // Срок действия резерва.
+  google.protobuf.Duration ttl = 6;
+}
+
+message ReserveFundsResponse {
+  string reservation_id = 1;
+  ReservationStatus status = 2;
+  google.protobuf.Timestamp reserved_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+
+message CommitReservationRequest {
+  string reservation_id = 1;
+  string operation_id = 2;
+
+  // Идентификатор подтверждённой операции внешнего провайдера.
+  string external_operation_id = 3;
+}
+
+message CommitReservationResponse {
+  string reservation_id = 1;
+  string ledger_transaction_id = 2;
+  ReservationStatus status = 3;
+  google.protobuf.Timestamp committed_at = 4;
+}
+
+
+message CancelReservationRequest {
+  string reservation_id = 1;
+  string operation_id = 2;
+
+  // Машиночитаемый код причины отмены.
+  // Например: PROVIDER_DECLINED, OPERATION_CANCELLED.
+  string reason_code = 3;
+}
+
+message CancelReservationResponse {
+  string reservation_id = 1;
+  ReservationStatus status = 2;
+  google.protobuf.Timestamp cancelled_at = 3;
+}
+
+enum OperationType{
+OPERATION_TYPE_UNSPECIFIED = 0;
+OPERATION_TYPE_CARD_PAYMENT = 1;
+OPERATION_TYPE_BANK_WITHDRAWAL = 2;
+OPERATION_TYPE_WALLET_TOP_UP = 3;
+OPERATION_TYPE_PARTNERS_PAYMENT = 4;
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  RESERVATION_STATUS_ACTIVE = 1;
+  RESERVATION_STATUS_COMMITTED = 2;
+  RESERVATION_STATUS_CANCELLED = 3;
+  RESERVATION_STATUS_EXPIRED = 4;
+
+  // Статус используется, если результат внешней операции неизвестен
+  // и требуется сверка с провайдером.
+  RESERVATION_STATUS_RECONCILIATION_REQUIRED = 5;
 }
