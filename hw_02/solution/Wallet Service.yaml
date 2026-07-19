@@ -70,7 +70,7 @@ paths:
           format: uuid
       responses:
         "202":
-          description: Card creation request accepted
+          description: Card creation request accepted. client should poll GET /v1/wallets/{walletId}/cards to obtain the application status
           content:
             application/json:
               schema:
