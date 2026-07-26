@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package wallet.antifraud.v1;
+
+service AntifraudService {
+  rpc CheckOperation(CheckOperationRequest)
+      returns (CheckOperationResponse);
+  // - INVALID_ARGUMENT: required fields are missing or amount_minor <= 0
+  // - NOT_FOUND: user, card, merchant, or operation context was not found
+  // - UNAVAILABLE: Antifraud Service is temporarily unavailable
+  // - INTERNAL: unexpected internal error
+}
+
+message CheckOperationRequest {
+  int64 amount_minor = 1;
+  // ISO 4217: RUB, USD, EUR.
+  string currency = 2;
+  string user_id = 3;
+  OperationType operation_type = 4;
+  string merchant_id = 5;
+  string merchant_country_code = 6;
+  string operation_id = 7;
+  string card_id = 8;
+  string ip_address = 9;
+  string device_fingerprint = 10;
+  OperationChannel channel = 11;
+}
+
+message CheckOperationResponse {
+  RiskDecision decision = 1;
+  int32 risk_score = 2;
+  string decision_id = 3;
+  repeated string reason_codes = 4;
+}
+
+enum RiskDecision {
+  RISK_DECISION_UNSPECIFIED = 0;
+  RISK_DECISION_DENY = 1;
+  RISK_DECISION_ALLOW = 2;
+  RISK_DECISION_REVIEW = 3;
+}
+enum OperationType {
+  OPERATION_TYPE_UNSPECIFIED = 0;
+  OPERATION_TYPE_CARD_PAYMENT = 1;
+  OPERATION_TYPE_P2P_TRANSFER = 2;
+  OPERATION_TYPE_BANK_WITHDRAWAL = 3;
+  OPERATION_TYPE_WALLET_TOP_UP = 4;
+  OPERATION_TYPE_SERVICE_PAYMENT = 5;
+}
+
+enum OperationChannel {
+  OPERATION_CHANNEL_UNSPECIFIED = 0;
+  OPERATION_CHANNEL_MOBILE = 1;
+  OPERATION_CHANNEL_WEB = 2;
+  OPERATION_CHANNEL_API = 3;
+  OPERATION_CHANNEL_CARD_NETWORK = 4;
+}
