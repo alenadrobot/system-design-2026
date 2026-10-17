@@ -1,0 +1,62 @@
+## API: создание hold для оплаты заказа
+
+**Method:** `POST`
+
+**URL:** `/payment-holds`
+
+**Назначение:**
+
+`Orders Service` вызывает `Payment Service`, чтобы временно зарезервировать сумму заказа у покупателя. Этот endpoint используется только для заказов с оплатой картой. Для `CASH_ON_DELIVERY` этот endpoint не вызывается.
+
+### Request
+
+```
+{
+  "order_id": "ord_12345",
+  "amount": 107.98,
+  "currency": "RUB",
+  "payment_type": "CARD", //оставила, если в будущем добавится еще какой-то тип оплаты
+  "payment_method_id": "pm_789", //идентификатор карты
+  "idempotency_key": "ord_12345-hold-1"
+}
+```
+
+### Успешный ответ
+
+**Status:** `201 Created`
+
+```
+{
+  "payment_id": "pay_456",
+  "order_id": "ord_12345",
+  "status": "HELD",
+  "provider_transaction_id": "txn_98765"
+}
+```
+
+### Ошибки
+
+**`400 Bad Request`** — некорректные или отсутствующие параметры.
+
+**`402 Payment Required`** — не удалось зарезервировать деньги, например недостаточно средств или карта отклонена.
+
+```
+{
+  "code": "INSUFFICIENT_FUNDS",
+  "message": "Payment hold was declined"
+}
+```
+
+Возможные причины:
+
+- `INSUFFICIENT_FUNDS`
+- `CARD_DECLINED`
+- `PAYMENT_METHOD_INVALID`
+
+**`503 Service Unavailable`** — внешний payment provider временно недоступен.
+
+### Что происходит внутри
+
+`Payment Service` создаёт платёжную операцию, обращается к внешнему Payment Provider для выполнения `hold`, сохраняет результат и `provider_transaction_id` в `Payment DB` и возвращает результат `Orders Service`.
+
+При повторном запросе с тем же `idempotency_key` повторный hold не создаётся.

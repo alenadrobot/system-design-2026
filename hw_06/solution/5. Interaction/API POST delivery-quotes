@@ -1,0 +1,82 @@
+## API: расчёт доступных вариантов доставки
+
+**Method:** `POST`
+
+**URL:** `/delivery-quotes`
+
+**Назначение:**
+
+`Orders Service` вызывает `Delivery Service`, чтобы получить доступные варианты доставки, сроки и стоимость для конкретного товара и адреса получателя. Доступные варианты доставки зависят от адреса, выбранного способа оплаты (карта или кэш при получении) и габаритов и веса
+
+### Почему POST, а не GET
+
+Хотя операция ничего не создаёт в системе, запрос содержит сложный структурированный набор параметров: адрес получателя, количество товара, вес и габариты. Передавать всё это через query parameters было бы громоздко. Поэтому для расчётного запроса используется `POST` с request body.
+
+### Request
+
+```
+{
+  "listing_id": "lst_123",
+  "qty": 2,
+  "payment_type": "CASH_ON_DELIVERY" //"CARD"
+  "destination": {
+    "city": "Novosibirsk",
+    "postal_code": "6273909"
+  },
+  "package": {
+    "weight_kg": 1.5,
+    "dimensions_cm": {
+      "length": 30,
+      "width": 20,
+      "height": 10
+    }
+  }
+}
+```
+
+### Успешный ответ
+
+**Status:** `200 OK`
+
+```
+{
+  "delivery_options": [
+    {
+      "delivery_method_id": "delivery_001",
+      "name": "Courier delivery",
+      "description": "Delivery to the specified address",
+      "price": 7.99,
+      "currency": "RUB",
+      "available_dates": [
+        "2026-10-08",
+        "2026-10-09"
+      ],
+      "pickup_points": []
+    },
+    {
+      "delivery_method_id": "delivery_002",
+      "name": "Pickup point",
+      "description": "Delivery to a selected pickup point",
+      "price": 4.99,
+      "currency": "RUB",
+      "available_dates": [
+        "2026-10-07",
+        "2026-10-08"
+      ],
+      "pickup_points": [
+        {
+          "pickup_point_id": "pp_123",
+          "name": "Pickup Point Novosibirsk Center",
+          "address": "Street Derjavina 55, Novosibirsk"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Ошибки
+
+- `400 Bad Request` — отсутствуют обязательные данные или они некорректны.
+- `404 Not Found` — доступные варианты доставки для переданных параметров не найдены.
+- `503 Service Unavailable` — внешний delivery provider временно недоступен.

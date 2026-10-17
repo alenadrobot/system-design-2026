@@ -1,0 +1,68 @@
+## API: создание резерва товара
+
+**Method:** `POST`
+
+**URL:** `/listings/{listingId}/reservations`
+
+**Назначение:**
+
+`Orders Service` вызывает `Listing Service`, чтобы проверить актуальные данные объявления, убедиться, что товар доступен, и временно зарезервировать нужное количество для конкретного заказа. Также он получает данные о товаре для доставки
+
+### Request
+
+```
+{
+  "order_id": "ord_12345",
+  "qty": 2
+}
+```
+
+### Успешный ответ
+
+**Status:** `201 Created`
+
+```
+{
+  "reservation_id": "res_98765",
+  "order_id": "ord_12345",
+  "reserved_qty": 2,
+  "price": 49.99,
+  "currency": "RUB",
+  "weight_kg": 1.5,
+  "dimensions_cm": {
+    "length": 30,
+    "width": 20,
+    "height": 10
+  },
+  "expires_at": "2026-10-05T15:30:00Z"
+}
+```
+
+`price` возвращается актуальная на момент резервирования.
+
+`expires_at` показывает, до какого момента действует временный резерв.
+
+### Ошибки
+
+**`404 Not Found`** — объявление не найдено.
+
+**`409 Conflict`** — резерв невозможно создать из-за текущего состояния объявления.
+
+Например:
+
+```
+{
+  "code": "INSUFFICIENT_QUANTITY",
+  "message": "Requested quantity is not available"
+}
+```
+
+Возможные причины:
+
+- `OUT_OF_STOCK`
+- `INSUFFICIENT_QUANTITY`
+- `LISTING_INACTIVE`
+
+### Что происходит внутри
+
+`Listing Service` проверяет актуальные `price`, `status` и доступное количество в primary `Listing DB`. Если товар доступен, сервис атомарно создаёт временный reservation с TTL. После истечения TTL неподтверждённый резерв освобождается.

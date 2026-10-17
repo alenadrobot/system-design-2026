@@ -1,0 +1,54 @@
+## API: получение объявления
+
+**Method:** `GET`
+
+**URL:** `/listings/{listingId}`
+
+**Назначение:**
+
+`Web App` через `API Gateway` вызывает `Listing Service`, чтобы получить данные конкретного объявления для отображения пользователю.
+
+### Request
+
+`listingId` передаётся в path:
+
+```
+GET /listings/lst_123
+```
+
+### Что происходит внутри
+
+`Listing Service` читает данные объявления из **read replica Listing DB**, потому что это обычный пользовательский просмотр и небольшая задержка репликации допустима.
+
+### Успешный ответ
+
+**Status:** `200 OK`
+
+```
+{
+  "listing_id": "lst_123",
+  "article": "ART-458923",
+  "title": "Coffee machine",
+  "description": "Automatic coffee machine in good condition",
+  "price": 4999.99,
+  "currency": "RUB",
+  "available_qty": 3,
+  "category": "HOME",
+  "status": "ACTIVE",
+  "seller_id": "usr_456",
+  "photos": [
+    "https://example.com/photo1", //ссылки на изображения в CDN/Object Storage
+    "https://example.com/photo2"
+  ],
+  "weight_kg": 1.5,
+  "dimensions_cm": {
+    "length": 30,
+    "width": 20,
+    "height": 10
+  }
+}
+```
+
+### Ошибки
+
+**`404 Not Found`** — объявление не существует.
