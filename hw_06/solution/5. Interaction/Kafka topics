@@ -1,0 +1,12 @@
+# Kafka topics
+
+| topic | producer | consumers | key | schema | event_type |
+| --- | --- | --- | --- | --- | --- |
+| `orders.events` | Orders Service | Notification Service, Delivery Service
+Listing Service | `order_id` | `event_id`, `event_type`, `event_version`, `occurred_at`, `order_id`, `buyer_id`, `seller_id`, `listing_id`, `status` | `OrderCreated`, `OrderConfirmed`, `OrderRejectedBySeller,
+OrderCancelled`, `OrderCompleted`, `ReturnInitiated`, `ReturnCompleted` |
+| `delivery.events` | Delivery Service | Orders Service, Notification Service | `order_id` | `event_id`, `event_type`, `event_version`, `occurred_at`, `delivery_id`, `order_id`, `tracking_id`, `status`, `failure_reason` | `DeliveryCreated`, `DeliveryInTransit`, `DeliveryCompleted`, `DeliveryFailed`, `ReturnDelivered` |
+| `payments.events` | Payment Service | Orders Service, Notification Service | `order_id` | `event_id`, `event_type`, `event_version`, `occurred_at`, `payment_id`, `order_id`, `amount_minor`, `currency`, `status`, `failure_reason` | `PaymentHeld`, `PaymentHoldFailed`, `PaymentCaptured`, `PaymentReleased`, `PaymentRefunded`, `PaymentFailed`, 
+`PayoutCompleted`, 
+`PayoutFailed` |
+| `listings.events` | Listing Service | Notification Service | `listing_id` | `event_id`, `event_type`, `event_version`, `occurred_at`, `listing_id`, `seller_id`, `status`, `moderation_reason` | `ListingCreated`, `ListingApproved`, `ListingRejected`, `ListingSold`, `ListingDeleted` |
